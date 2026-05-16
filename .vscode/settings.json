@@ -1,0 +1,7 @@
+{
+    "dotrush.roslyn.projectOrSolutionFiles": [
+        "e:\\Dev\\UnityExplorer\\src\\UnityExplorer.csproj",
+        "e:\\Dev\\UnityExplorer\\UniverseLib\\src\\UniverseLib.csproj"
+    ],
+    "dotnet.defaultSolution": "src/UnityExplorer.sln"
+}
