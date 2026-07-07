@@ -15,7 +15,7 @@ Scope: Remaining work to get close to UnityExplorer feature parity over MCP, wit
 Status (2025-12-19): Progress 100% (155/155). Test‑VM hosts are green on both ports (IL2CPP `51477`, Mono `51478`) via inspector CLI, write-enabled smoke, and contract tests (90 total: 89 passed, 1 skipped placeholder). Reflection inspector read tools (static member + singleton member reads) are present; search surfaces + Freecam + Clipboard are present; `stream_events` emits deterministic `scenes` and `selection` snapshots on open.
 
 ## Decisions (2025-12-13)
-- [x] PRIORITY: fix the UnityExplorer dropdown Il2Cpp cast crash and remove the Test‑VM‑only `Mods\UeMcpHeadless.dll` workaround (guard added; mod disabled on Test-VM).
+- [x] PRIORITY: fix the UnityExplorer dropdown Il2Cpp cast crash and remove the Test‑VM‑only `Mods\UeMcpHeadless.dll` workaround (guard added; mod disabled on Windows host).
 - [x] Add guarded writes to Mono (start with `SetActive`, `SelectObject`, `GetTimeScale`/`SetTimeScale`) behind `allowWrites` + `requireConfirm` (implemented; validate on hosts).
 - [x] Space Shooter project changes are allowed to improve repeatable IL2CPP + Mono rebuilds (source: `C:\codex-workspace\space-shooter`).
 - [x] Treat inspector validation as a first-class gate: run `tools/Run-McpInspectorCli.ps1` early on both hosts for any wire/schema change.
@@ -57,7 +57,7 @@ This section summarizes what still needs to be in place so that Unity Explorer M
 - Keep `plans/mcp-interface-concept.md`, DTO code, and contract tests in sync; update all three together when shapes change.
 - Never commit `.codex` runtime artifacts (`.codex/config.toml`, `.codex/history.jsonl`, `.codex/exec-logs/`, `.codex/auth.json`, `.codex/version.json`); they contain secrets and will block git push.
 - Inspector validation is a gate: run `pwsh ./tools/Run-McpInspectorCli.ps1 -BaseUrl <url>` early on both hosts for any wire/schema change.
-- Test-VM validation is a gate: for any behavior change, validate on the Test-VM in the same iteration (not after).
+- Windows host validation is a gate: for any behavior change, validate on the Windows host in the same iteration (not after).
 - Smoke scripts must pass a PowerShell parse sanity check (run them against http://127.0.0.1:1 to catch ParserError early).
 - IL2CPP regression is a gate: if a change touches shared query/DTO code used by both hosts (even if the change was Mono-motivated), run an IL2CPP regression pass (inspector CLI + smoke + contract tests).
 - Do not add game-specific assumptions; tests must pass on Space Shooter.
@@ -67,7 +67,7 @@ This section summarizes what still needs to be in place so that Unity Explorer M
 - Mouse UI multi-hit: UI mode should return a list of hits (`Items`) plus `primaryId`; follow-up via `GetObject`/`GetComponents` (or a UI detail tool) on the selected `Id`.
 - Logs: include `source`; if `category` exists, include it or document its absence.
 - Time-scale writes: single guarded tool; add tests and docs when implemented.
-- Stop SpaceShooter on the Test-VM before copying mods (`Update-Mod-Remote.ps1`) to avoid SCP file-lock failures; restart the game after deployment.
+- Stop SpaceShooter on the Windows host before copying mods (`Update-Mod-Remote.ps1`) to avoid SCP file-lock failures; restart the game after deployment.
 
 ## 0.1 Parallel worker scalability refactor (blocking)
 
@@ -92,7 +92,7 @@ Goal: reduce merge conflicts further by splitting MCP implementation into per-fe
 - [x] Update coding rules in `AGENTS.md` and `.codex/AGENTS.md` to describe the new folder conventions (where to add tools/resources for each feature).
 - [x] Build: `dotnet build src/UnityExplorer.csproj -c ML_Cpp_CoreCLR` and `dotnet build src/UnityExplorer.csproj -c ML_Mono`.
 - [x] Contract tests: run against IL2CPP + Mono discovery files.
-- [x] Test-VM validation gate (same iteration): inspector CLI + smoke on IL2CPP `51477` and Mono `51478`.
+- [x] Windows host validation gate (same iteration): inspector CLI + smoke on IL2CPP `51477` and Mono `51478`.
 
 ## 0.3 Split large MCP hotspots (>400 lines)
 
@@ -105,7 +105,7 @@ Goal: reduce merge conflicts further by splitting the remaining large shared MCP
 - [x] Refactor `tests/dotnet/UnityExplorer.Mcp.ContractTests/JsonRpcContractTests.cs` into multiple test classes/files by topic (`Tools`, `Resources`, `Streams`, `Errors`) with a shared JSON-RPC client helper.
 - [x] Build: `dotnet build src/UnityExplorer.csproj -c ML_Cpp_CoreCLR` and `dotnet build src/UnityExplorer.csproj -c ML_Mono`.
 - [x] Contract tests: run against IL2CPP + Mono discovery files.
-- [x] Test-VM validation gate (same iteration): inspector CLI + smoke on IL2CPP `51477` and Mono `51478`.
+- [x] Windows host validation gate (same iteration): inspector CLI + smoke on IL2CPP `51477` and Mono `51478`.
 
 ## 1. Transport & Protocol Polish
 
@@ -166,7 +166,7 @@ Goal: reduce merge conflicts further by splitting the remaining large shared MCP
 
 ## 9. Additional Quality / Nice‑to‑Have TODOs
 
-- [x] Add a tiny “smoke CLI” script (PowerShell/bash) that exercises `initialize`, `list_tools`, `GetStatus`, and `TailLogs` in one go (see `tools/Invoke-McpSmoke.ps1`; mirrors the Test-VM harness).
+- [x] Add a tiny “smoke CLI” script (PowerShell/bash) that exercises `initialize`, `list_tools`, `GetStatus`, and `TailLogs` in one go (see `tools/Invoke-McpSmoke.ps1`; mirrors the Windows host harness).
 - [x] Add a contract test that calls `MousePick` and verifies the result shape (even if `Hit=false`).
 - [x] Add a contract test that calls `TailLogs` via `call_tool` (not just `read_resource`).
 - [x] Ensure all DTOs are serializable without extra JSON options (no cycles, no Unity types leaking through).
@@ -190,7 +190,7 @@ Goal: reduce merge conflicts further by splitting the remaining large shared MCP
 - [x] Ensure no contract tests assume game‑specific content; adjust tests and docs so Space Shooter is the fully supported host for MCP contract validation (other titles are examples only).
 - [x] Define 1–2 safe write scenarios on Space Shooter using `SetActive` / `SelectObject` with `AllowWrites=true` and `RequireConfirm=true`, and document them in `plans/space-shooter-test-plan.md` (also note `SetTimeScale` + `SpawnTestUi`/`MousePick` flow for UI validation).
 - [x] Make Space Shooter Mono + IL2CPP rebuilds repeatable from `C:\codex-workspace\space-shooter` (allowed to modify the Unity project/scripts); document exact build steps and keep build outputs stable (BuildCommands scene fallback + headless CPU lighting, scripts `Update-SpaceShooter-BuildScripts-Remote.ps1` / `Build-SpaceShooter-Remote.ps1` produce fresh outputs under `...\SpaceShooter_IL2CPP` / `...\SpaceShooter_Mono`).
-- [x] PRIORITY: fix the UnityExplorer dropdown Il2Cpp cast crash (UI `Dropdown` array cast) and remove the Test‑VM‑only `UeMcpHeadless.dll` workaround (guarded warning in UIManager; headless mod renamed to .disabled on Test-VM).
+- [x] PRIORITY: fix the UnityExplorer dropdown Il2Cpp cast crash (UI `Dropdown` array cast) and remove the Test‑VM‑only `UeMcpHeadless.dll` workaround (guarded warning in UIManager; headless mod renamed to .disabled on Windows host).
 
 ## 11. Mono / MelonLoader Support
 
@@ -204,7 +204,7 @@ Goal: reduce merge conflicts further by splitting the remaining large shared MCP
   - [x] Bring up minimal Mono MCP endpoints (`initialize`, `list_tools`, `read_resource` for status/scenes/objects/logs) and keep shapes identical to CoreCLR; document any deltas in `plans/mcp-interface-concept.md`.
   - [x] Implement real `stream_events` on Mono (matching CoreCLR streamable-http behaviour; log/selection/scene/tool_result notifications; cleanup on disconnect; identical error envelope).
   - [x] Add a Mono smoke harness (subset of contract tests) and doc how to run it.
-  - [x] Fix Space Shooter Mono Unity build automation (implement `BuildCommands.BuildWindows64Mono` or adjust the CLI target) so `C:\codex-workspace\space-shooter-build\SpaceShooter_Mono` can be produced for smoke runs (now available on the Test-VM at `http://192.168.178.210:51478`).
+  - [x] Fix Space Shooter Mono Unity build automation (implement `BuildCommands.BuildWindows64Mono` or adjust the CLI target) so `C:\codex-workspace\space-shooter-build\SpaceShooter_Mono` can be produced for smoke runs (now available on the Windows host at `http://192.168.178.210:51478`).
 
 - [x] Phase C — Parity + tests
   - [x] Implement guarded writes on Mono (start with `SetActive`, `SelectObject`, `GetTimeScale`/`SetTimeScale`) behind `allowWrites` + `requireConfirm`; keep the same error envelope as CoreCLR (needs live validation on hosts).
@@ -263,7 +263,7 @@ Priority right now: **12.7 Console scripts** + **12.8 Hooks (advanced)**.
 - [x] Safety (read/write/delete): block path traversal, require `.cs`, enforce max bytes, respect `allowWrites` + `requireConfirm`, normalize BOM.
 - [x] Contract tests (gated): schema + read/write/delete round-trip + cleanup (`UE_MCP_CONSOLE_SCRIPT_TEST_ENABLED=1`).
 - [x] Smoke: cover one full script lifecycle (create → read → run → delete) on IL2CPP + Mono.
-- [x] Test-VM validation (read/write/delete/run/startup): inspector CLI + smoke + contract tests on IL2CPP (`51477`) + Mono (`51478`).
+- [x] Windows host validation (read/write/delete/run/startup): inspector CLI + smoke + contract tests on IL2CPP (`51477`) + Mono (`51478`).
 
 ### 12.8 Hooks parity (advanced) (TOP)
 - [x] Align + document allowlist semantics: `hookAllowlistSignatures` contains type full names (both hosts).
@@ -272,7 +272,7 @@ Priority right now: **12.7 Console scripts** + **12.8 Hooks (advanced)**.
 - [x] Implement hook management: `HookGetSource(signature)` (read-only), `HookSetEnabled(signature, enabled, confirm?)`, `HookSetSource(signature, source, confirm?)` (guarded; requires `enableConsoleEval=true`).
 - [x] Improve `HookAdd(type, method)`: accept full `MethodInfo.FullDescription()` signature in `method` to select overloads (keep method-name support).
 - [x] Contract tests + smoke: cover enable/disable + source read/write on a safe allowlisted type (keep `UE_MCP_HOOK_TEST_ENABLED` gate).
-- [x] Test-VM validation: inspector CLI + smoke + contract tests on IL2CPP + Mono.
+- [x] Windows host validation: inspector CLI + smoke + contract tests on IL2CPP + Mono.
 
 ## 13. Streams & Agent UX
 - [x] Decide and document the minimal “agent-first” event set with stable payloads and examples (log/scenes/selection/tool_result) in `plans/mcp-interface-concept.md`.
@@ -281,7 +281,7 @@ Priority right now: **12.7 Console scripts** + **12.8 Hooks (advanced)**.
 - [x] Mirror stream backpressure onto Mono (avoid blocking synchronous broadcast; align with IL2CPP cap/drop policy).
 
 ## 14. Reliability / Ops
-- [x] Harden Test-VM deploy for IL2CPP + Mono (`tools/Update-Mod-Remote.ps1` stages to remote home, then copies with remote PowerShell; avoids scp drive-letter issues; documented in `plans/space-shooter-test-plan.md`).
+- [x] Harden Windows host deploy for IL2CPP + Mono (`tools/Update-Mod-Remote.ps1` stages to remote home, then copies with remote PowerShell; avoids scp drive-letter issues; documented in `plans/space-shooter-test-plan.md`).
 - [x] Add a lightweight watchdog for the win-dev MCP proxies (8082/8083): healthcheck + restart commands + log paths.
 - [x] Cross-title IL2CPP regression: BLOCKED (no second IL2CPP title candidate available right now); document the blocker and skip for DoD.
 - [x] Add CI hooks for inspector CLI smoke runs where infra allows (optional).

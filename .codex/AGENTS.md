@@ -5,11 +5,10 @@ Speak a simple language so you are easier to understand
 - Keep `plans/unity-explorer-mcp-plan.md` (high-level plan) and `plans/unity-explorer-mcp-todo.md` (detailed checklist) in sync with actual code/DTOs/tests. (`.plans/` contains redirects only.)
 - Keep `plans/mcp-interface-concept.md` as the source of truth for DTO shapes, errors, examples, and agent UX expectations; update it when shapes change.
 - All documentation files must be explained here, with a single source of truth (no duplication). See “Docs map” below.
-- Use Space Shooter on the Test-VM; avoid game-specific assumptions.
 
 # GOAL of this Repo
 - Expose Unity Explorer’s runtime capabilities through an in‑process MCP server with **streamable HTTP** transport, making game state and safe controls available as MCP resources, tools, and streams.
-- We want to provide all functionality which UnityExplorer does Provide (Space Shooter is the primary Test-VM game; avoid game-specific assumptions)
+- We want to provide all functionality which UnityExplorer does Provide 
 - Validate functionality with automated tests (mix of unit and integration tests).
 - The ultimate goal is to have a AGENT use the MCP Tool to reverse engineer games and create mods for games with minimal user assistance
 
@@ -60,16 +59,14 @@ Speak a simple language so you are easier to understand
 - Keep each message ≤200 lines; split large changes into sequential diffs.
 - Add TODO/FIXME comments only if you will resolve them within this task.
 - Definition of Done: all TODOs checked, contract tests green, inspector flow end-to-end, smoke CLI passes on a running game, docs/tests/DTOs in sync.
-- Recommended order: (1) DTOs/schema + errors + rate limit, (2) read parity (logs/camera/mouse multi-hit), (3) guarded writes incl. time-scale, (4) streams cleanup + rate-limit tests, (5) inspector/docs polish, (6) Space Shooter validation.
+- Recommended order: (1) DTOs/schema + errors + rate limit, (2) read parity (logs/camera/mouse multi-hit), (3) guarded writes incl. time-scale, (4) streams cleanup + rate-limit tests, (5) inspector/docs polish
 
 # Quality gates
 - Build passes locally.
 - Basic e2e path demonstrable (start → handshake → tool call → response).
-- Test-VM validation is a gate: for any behavior change, validate on the Test-VM in the same iteration (not after). See `plans/unity-explorer-mcp-todo.md` → Pitfalls.
 - IL2CPP regression is a gate: if a change touches shared query/DTO code used by both hosts (even if the change was Mono-motivated), run an IL2CPP regression pass (inspector CLI + smoke + contract tests).
 - Inspector validation is CLI-only (no browser UI). Prefer `pwsh ./tools/Run-McpInspectorCli.ps1 -BaseUrl <baseUrl>` or `npx @modelcontextprotocol/inspector --cli <baseUrl>/mcp --method tools/list`.
 - Include minimal docs: feature overview + how to run/dev test.
-- Mono build/deploy note: the game loads `Release/UnityExplorer.MelonLoader.Mono/Mods/UnityExplorer.ML.Mono.dll` (not the root). `dotnet build src/UnityExplorer.csproj -c ML_Mono` now copies into `Mods/`, but use a quick hash check if Mono seems stale.
 
 Docs map (single source of truth, no duplication)
 - `plans/unity-explorer-mcp-plan.md`: High-level plan, architecture, current status.
@@ -84,14 +81,9 @@ Keep "plans/unity-explorer-mcp-todo.md" up to date during "working mode"
 
 If you notice that we should add further instructions to make understanding or working in this repo easier for future agents, then ask the user for permission to add these instructions to .agents.md
 
-
 # MCP Tools
 Use provided MCP tools for general work, information gathering (pulling documentation) and interacting with the Test-VM.
-
-- `win-dev-vm-ui` provides full access to the Test-VM. Use it to validate our application.
-- `win-dev-vm-command` also provides full access to the Test-VM. Use it to validate our application.
 - `context7` does provide access to various documentation material
-- `perplexity` should be used for research tasks when context7 response is not sufficient. Prefer authoritative domains and cite sources.
 - use `filesystem` tool for all filesystem specific operations (especially read and write)
 - don't use `apply_patch` use `filesystem`
 - use `fetch` tool to access web resources

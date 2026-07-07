@@ -4,7 +4,7 @@ This build hosts a Model Context Protocol (MCP) server inside the Unity Explorer
 
 ## Status
 
-- Targets: CoreCLR builds (`BIE_*_Cpp_CoreCLR`, `ML_Cpp_CoreCLR`, `STANDALONE_Cpp_CoreCLR`). Mono (`ML_Mono`, `net35`) hosts a lightweight MCP (initialize/list_tools/read_resource/call_tool for status/scenes/objects/components/search/selection/logs/camera/mouse-pick/GetVersion) with discovery and `stream_events` (log/selection/scene/tool_result notifications with `source` + optional `category`); Mono also exposes guarded writes when `allowWrites=true` (`requireConfirm` recommended). See `plans/mcp-interface-concept.md` for the exact tool list and gating (reflection/component/hook allowlists + `enableConsoleEval`).
+- Targets: CoreCLR builds (`BIE_*_Cpp_CoreCLR`, `ML_Cpp_CoreCLR`, `STANDALONE_Cpp_CoreCLR`).
 - Console scripts: `unity://console/scripts`, `unity://console/script?path=...`, `ReadConsoleScript` (RO), guarded `WriteConsoleScript`/`DeleteConsoleScript`/`RunConsoleScript`, and startup controls (`GetStartupScript`/`WriteStartupScript`/`SetStartupScriptEnabled`/`RunStartupScript`) on both hosts.
 - Hooks advanced: `HookListAllowedTypes`, `HookListMethods`, `HookGetSource`, guarded `HookSetEnabled`/`HookSetSource` (both hosts).
 - Transport: lightweight streamable HTTP over a local TCP listener.
@@ -18,28 +18,22 @@ This build hosts a Model Context Protocol (MCP) server inside the Unity Explorer
 3. Discovery file is written to `%TEMP%/unity-explorer-mcp.json` with `{ pid, baseUrl, port, modeHints, startedAt }`.
 4. Connect a client via the MCP C# SDK using `HttpClientTransport` (AutoDetect mode), or talk directly to the HTTP endpoints described below.
 
-Test‑VM Space Shooter E2E plan: `plans/space-shooter-test-plan.md` (canonical paths/ports/builds on the VM).
-
-Mono/net35 builds: MCP host exposes initialize/list_tools/read_resource/call_tool for status/scenes/objects/components/search/selection/logs/camera/mouse-pick/GetVersion plus guarded writes when `allowWrites=true` (`requireConfirm` recommended; see `plans/mcp-interface-concept.md` for allowlists + `enableConsoleEval`). `stream_events` (log/selection/scene/tool_result; payloads include `source` + optional `category`) and discovery (`unity-explorer-mcp.json`) are available. Smoke/CI: `pwsh ./tools/Run-McpMonoSmoke.ps1 -BaseUrl http://127.0.0.1:51477 -LogCount 10 -StreamLines 3 [-EnableWriteSmoke]` (initialize → list_tools → GetStatus/TailLogs/MousePick → read status/scenes/logs → optional guarded write smoke: ConsoleEval + SpawnTestUi + Add/RemoveComponent + SetMember(Image.color) + HookAdd/HookRemove + reparent/destroy/time-scale writes (then reset config) → stream_events tool_result check). Test-VM Mono host base URL: `http://192.168.178.210:51478`.
-
 ## Inspector CLI smoke
 
 Run this non-interactive CLI smoke to validate the MCP surface via `@modelcontextprotocol/inspector --cli` (runs tools/list, resources/list, read status, and call GetStatus). Fails fast if `npx` is missing or the host is down.
 
 ```powershell
 pwsh ./tools/Run-McpInspectorCli.ps1 -BaseUrl http://192.168.178.210:51477/mcp
-# Mono host example (optional auth header)
-pwsh ./tools/Run-McpInspectorCli.ps1 -BaseUrl http://192.168.178.210:51478/mcp -AuthToken mytoken
 ```
 
-The helper accepts BaseUrl values with or without `/mcp` and normalizes to the JSON-RPC path. Optional CI: `.github/workflows/mcp-inspector-cli.yml` is a manual (`workflow_dispatch`) workflow that runs this script against provided `baseUrlIl2cpp`/`baseUrlMono` inputs (no-op when inputs are empty; host must be reachable from the runner).
+The helper accepts BaseUrl values with or without `/mcp` and normalizes to the JSON-RPC path. Optional CI: `.github/workflows/mcp-inspector-cli.yml` is a manual (`workflow_dispatch`) workflow that runs this script against provided `baseUrlIl2cpp` inputs (no-op when inputs are empty; host must be reachable from the runner).
 
 ## All gates
 
-Run the full IL2CPP + Mono gate stack (inspector CLI + smoke + contract tests). Fails fast on any failure.
+Run the full IL2CPP test stack (inspector CLI + smoke + contract tests). Fails fast on any failure.
 
 ```powershell
-pwsh ./tools/Run-McpAllGates.ps1 -BaseUrlIl2cpp http://192.168.178.210:51477 -BaseUrlMono http://192.168.178.210:51478 [-EnableWriteSmoke] [-AuthToken <token>]
+pwsh ./tools/Run-McpAllGates.ps1 -BaseUrlIl2cpp http://192.168.178.210:51477 [-EnableWriteSmoke] [-AuthToken <token>]
 ```
 
 ## Inspector CLI (direct one-liners)
@@ -50,65 +44,6 @@ We do not use the Inspector UI for validation; use the CLI.
 npx @modelcontextprotocol/inspector --cli http://192.168.178.210:51477/mcp --method tools/list
 npx @modelcontextprotocol/inspector --cli http://192.168.178.210:51477/mcp --method tools/call --tool-name GetStatus
 ```
-
-Mono host example:
-
-```bash
-npx @modelcontextprotocol/inspector --cli http://192.168.178.210:51478/mcp --method tools/list
-```
-
-## Mono Host Validation Checklist
-
-Use this when you have a Mono (non‑IL2CPP) Unity game with MelonLoader.
-
-1. Build the Mono DLL:
-
-   ```powershell
-   cd UnityExplorer
-   dotnet build src/UnityExplorer.csproj -c ML_Mono
-   ```
-
-   Output: `Release/UnityExplorer.MelonLoader.Mono/UnityExplorer.ML.Mono.dll`.
-   - Sanity check: hashes should match after the build copies into `Mods/`:
-
-     ```bash
-     sha256sum Release/UnityExplorer.MelonLoader.Mono/UnityExplorer.ML.Mono.dll Release/UnityExplorer.MelonLoader.Mono/Mods/UnityExplorer.ML.Mono.dll
-     ```
-
-2. Install into a Mono Unity game:
-   - Ensure MelonLoader is installed for that game.
-   - Copy `UnityExplorer.ML.Mono.dll` into the game’s `Mods/` folder.
-
-3. Enable MCP in UnityExplorer:
-   - In the game’s UnityExplorer folder (usually `sinai-dev-UnityExplorer/`), create/edit `mcp.config.json` and set:
-
-     ```json
-     { "enabled": true, "port": 51477, "bindAddress": "127.0.0.1" }
-     ```
-
-   - If you need remote access (e.g., Test‑VM), use `"bindAddress": "0.0.0.0"`.
-   - If you run IL2CPP + Mono side‑by‑side, use a different Mono port (Test‑VM standard: `51478`).
-
-4. Start the game and wait for UnityExplorer to load.
-   - Verify discovery file exists and note `baseUrl`/`port`:
-
-     ```powershell
-     Get-Content "$env:TEMP\unity-explorer-mcp.json"
-     ```
-
-5. Run the Mono smoke script from this repo:
-
-   ```powershell
-   pwsh ./tools/Run-McpMonoSmoke.ps1 -BaseUrl http://127.0.0.1:51477 -LogCount 10 -StreamLines 3 [-EnableWriteSmoke]
-   ```
-
-   Expect PASS. Add `-EnableWriteSmoke` to toggle `allowWrites` temporarily and exercise SpawnTestUi + `SetMember` (Image.color) + Reparent/DestroyObject + `SetTimeScale` (config resets afterward). If you see “Connection refused”, MCP is not enabled or the port differs.
-
-6. (Optional) Inspector CLI check:
-
-   ```bash
-   npx @modelcontextprotocol/inspector --cli http://127.0.0.1:51477/mcp --method tools/list
-   ```
 
 ## Configuration
 
@@ -341,15 +276,15 @@ This matches the `stream_events` behavior and will print JSON‑RPC `notificatio
 2. From your dev machine, run:
 
    ```bash
-   npx @modelcontextprotocol/inspector --cli http://<TestVM-IP>:51477/mcp --method tools/list
-   npx @modelcontextprotocol/inspector --cli http://<TestVM-IP>:51477/mcp --method resources/read --uri unity://status
-   npx @modelcontextprotocol/inspector --cli http://<TestVM-IP>:51477/mcp --method tools/call --tool-name GetStatus
+   npx @modelcontextprotocol/inspector --cli http://127.0.0.1:51477/mcp --method tools/list
+   npx @modelcontextprotocol/inspector --cli http://127.0.0.1:51477/mcp --method resources/read --uri unity://status
+   npx @modelcontextprotocol/inspector --cli http://127.0.0.1:51477/mcp --method tools/call --tool-name GetStatus
    ```
 
 3. Or use the repo helper:
 
    ```powershell
-   pwsh ./tools/Run-McpInspectorCli.ps1 -BaseUrl http://<TestVM-IP>:51477
+   pwsh ./tools/Run-McpInspectorCli.ps1 -BaseUrl http://127.0.0.1:51477
    ```
 
 ## Smoke CLI (PowerShell)
@@ -358,13 +293,11 @@ This matches the `stream_events` behavior and will print JSON‑RPC `notificatio
 - If `-BaseUrl` is omitted, the script reads `$env:UE_MCP_DISCOVERY` or `%TEMP%/unity-explorer-mcp.json`.
 - Sequence: `initialize` → `notifications/initialized` → `list_tools` → `call_tool` (`GetStatus`, `TailLogs`) → `read_resource` (`unity://status`, `unity://scenes`, `unity://logs/tail?count=...`).
 - Emits a short summary and exits non-zero on failure; use it alongside the inspector for quick health checks.
-- Mono host smoke/CI: `pwsh ./tools/Run-McpMonoSmoke.ps1 -BaseUrl http://127.0.0.1:51477 -StreamLines 3 -LogCount 10` (same flow as above but also calls `MousePick` and fails if `stream_events` lacks a `tool_result`).
 
 ## MCP Tests & CI
 
 - Local/CI command: `pwsh ./tools/Run-McpContractTests.ps1` (runs Release configuration).
 - Run after building the CoreCLR IL2CPP target so the MCP server is present; CI should call this helper as part of the standard build pipeline.
-- Mono smoke/CI entry (no Test-VM required): `pwsh ./tools/Run-McpMonoSmoke.ps1` against a locally running Mono host; wire this into Mono builds to ensure initialize/list_tools/read_resource/call_tool + `stream_events` keep working.
 
 ## Troubleshooting
 
@@ -383,5 +316,4 @@ This matches the `stream_events` behavior and will print JSON‑RPC `notificatio
 ## Notes
 
 - Error envelopes follow JSON-RPC with `error.data.kind` (see `plans/mcp-interface-concept.md` for the exact shapes). Tool failures return `{ ok:false, error:{ kind, message, hint? } }`.
-- Mono/net35 hosts the lightweight MCP with the same read surface plus guarded writes (SetConfig/SetActive/SetMember/SelectObject/GetTimeScale/SetTimeScale) gated by `allowWrites` + `requireConfirm` (defaults keep writes off); `SetMember` respects `reflectionAllowlistMembers` (e.g., `UnityEngine.UI.Image.color`). Unhollower builds still do not host the MCP server.
 - All Unity API calls are marshalled to the main thread.

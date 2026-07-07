@@ -22,20 +22,10 @@ If the server is not running, discovery tests will fail or be skipped.
 
 ## Optional gated write tests
 
-Some contract tests perform guarded writes (they toggle `allowWrites` briefly and then reset config). They are disabled by default and must be enabled explicitly when running against a safe test host (Space Shooter).
+Some contract tests perform guarded writes (they toggle `allowWrites` briefly and then reset config). They are disabled by default and must be enabled explicitly when running against a safe test host.
 
 - `UE_MCP_HOOK_TEST_ENABLED=1` — runs hook lifecycle + advanced hook tests (uses `hookAllowlistSignatures=["UnityEngine.GameObject"]`).
 - `UE_MCP_CONSOLE_SCRIPT_TEST_ENABLED=1` — runs console script read/write/delete round-trip (writes a temporary `mcp-test-<guid>.cs` under `ConsoleController.ScriptsFolder` and deletes it).
-
-## Mono smoke entry (no Test-VM)
-
-For Mono/net35 hosts, first follow the Mono host validation checklist in `README-mcp.md`, then use the lightweight smoke script instead of the full contract suite:
-
-```powershell
-pwsh ./tools/Run-McpMonoSmoke.ps1 -BaseUrl http://127.0.0.1:51477 -LogCount 10 -StreamLines 3
-```
-
-Flow: `initialize` → `notifications/initialized` → `list_tools` → `call_tool` (`GetStatus`, `TailLogs`, `MousePick`) → `read_resource` (`unity://status`, `unity://scenes`, `unity://logs/tail`) → `stream_events` (expects a `tool_result` notification). This is suitable for Mono CI jobs where the host runs locally.
 
 ## Next steps
 

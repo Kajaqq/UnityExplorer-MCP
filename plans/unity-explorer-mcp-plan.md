@@ -7,7 +7,7 @@
 This plan merges the original scope, the current implementation snapshot, and the TODO list into a single up‑to‑date document.
 
 ### Latest iteration snapshot (2025-12-19)
-- IL2CPP MCP host on the Test-VM (`http://192.168.178.210:51477` and `/mcp`) now survives malformed JSON-RPC: invalid requests return HTTP 400 with structured errors, and the host stays alive. MainThread dispatch falls back to UniverseLib main-thread invoke when no `SynchronizationContext` is captured.
+- IL2CPP MCP host on the Windows host (`http://127.0.0.1:51477` and `/mcp`) now survives malformed JSON-RPC: invalid requests return HTTP 400 with structured errors, and the host stays alive. MainThread dispatch falls back to UniverseLib main-thread invoke when no `SynchronizationContext` is captured.
 - Contract suite passes (90 total: 89 passed, 1 skipped) on Space Shooter IL2CPP + Mono via `UE_MCP_DISCOVERY` (including gated ConsoleScripts/Hooks tests when enabled). Inspector CLI smoke and the repo smoke scripts succeed against both hosts. Optional CI hook: `.github/workflows/mcp-inspector-cli.yml` (manual `workflow_dispatch`) can run inspector CLI smoke against provided MCP base URLs.
 - win-dev control plane alias surface validated: `McpProxy8083` (mcp-control) exposes the harness tool names; seed the session after a restart with `initialize` that includes `Accept: application/json, text/event-stream` plus a `clientInfo` payload (e.g., `protocolVersion=2024-11-05`, `capabilities={}`) and the `win-dev-vm-ui/State-Tool` + `win-dev-vm-ui/Powershell-Tool` succeed. Logs: `C:\codex-workspace\logs\mcp-proxy-808{2,3}.log`.
 - Console scripts parity: `unity://console/scripts` + `unity://console/script?path=...` resources and `ReadConsoleScript` + guarded `WriteConsoleScript`/`DeleteConsoleScript` + `RunConsoleScript` + startup controls (`Get/Write/Set/RunStartupScript`) on both hosts (BOM normalized; 256KB cap). Hooks parity (advanced): discovery + source read/write + enable/disable + HookAdd signature support.
@@ -24,7 +24,6 @@ This plan merges the original scope, the current implementation snapshot, and th
 ### Decisions (2025-12-13)
 
 - Mono now ships guarded writes (SetConfig/SetActive/SelectObject/TimeScale) behind `allowWrites` + `requireConfirm`; use the opt-in Mono write smoke when validating on hosts.
-- Space Shooter project changes on the Test‑VM are allowed to improve repeatable Mono/IL2CPP rebuilds (source: `C:\\codex-workspace\\space-shooter`).
 - Dropdown Il2Cpp cast crash is guarded; keep watching logs across titles and leave `UeMcpHeadless.dll` disabled.
 - Treat inspector validation as a first-class gate: run `tools/Run-McpInspectorCli.ps1` early on both hosts for any wire/schema change.
 
@@ -34,11 +33,11 @@ Single source of truth for open tasks: `plans/unity-explorer-mcp-todo.md`.
 
 Gates (always)
 - Inspector validation is CLI-only (`tools/Run-McpInspectorCli.ps1` or direct `npx @modelcontextprotocol/inspector --cli <baseUrl>/mcp ...`).
-- Test-VM validation happens in the same iteration as any behavior change.
-- If a change touches shared query/DTO code (even if Mono-motivated), run IL2CPP regression (inspector CLI + smoke + contract tests).
+- Windows host validation happens in the same iteration as any behavior change.
+- If a change touches shared query/DTO code, run IL2CPP regression (inspector CLI + smoke + contract tests).
 
 Near-term (next ~10 iterations)
-0) DONE: Parallel-work scalability refactor: split `src/Mcp/Dto.cs` into per-feature DTO files and move Mono host dispatch out of `src/Mcp/McpSimpleHttp.cs` (reduce merge conflicts for parallel workers).
+0) DONE: Parallel-work scalability refactor: split `src/Mcp/Dto.cs` into per-feature DTO files.
 0.2) DONE: Split MCP code into feature-based folders/files (reduce shared hotspots: `UnityReadTools`/`UnityWriteTools`, `MonoReadTools`/`MonoWriteTools`, `MonoMcpHandlers`).
 0.3) DONE: Split large MCP hotspots: `src/Mcp/McpSimpleHttp.cs` (transport) and `tests/dotnet/UnityExplorer.Mcp.ContractTests/JsonRpcContractTests.cs` (contract tests).
 1) DONE: Console scripts parity: list + read/write/delete + run + startup controls implemented and validated (guarded; 256KB cap).
@@ -67,8 +66,9 @@ Near-term (next ~10 iterations)
   - Time-scale widget and keybinds (lock/pause/speed change)
   - Settings, Clipboard, etc.
 - MCP clients (IDEs, agents, inspector tools) connect over HTTP to inspect and, when allowed, control the running game.
-- Target: Windows first. CoreCLR IL2CPP and MelonLoader Mono (`ML_Mono` / net35) are equally important for MCP; keep parity and validate both hosts whenever changing shared MCP surfaces. For deployment we use `Release/UnityExplorer.MelonLoader.IL2CPP.CoreCLR` (and `Release/UnityExplorer.MelonLoader.IL2CPP` if needed) plus `Release/UnityExplorer.MelonLoader.Mono/Mods/UnityExplorer.ML.Mono.dll`.
-
+- Target: BepInEx 6 CoreCLR IL2CPP (no Mono).
+- This is a single-game focused fork, based on the original UnityExplorer project. 
+- The game is running Unity 6000.0.77f and uses CoreCLR IL2CPP via a custom fork of BepInEx 6 with source located in `../BepInEx/`.
 ---
 
 ## 2) Architecture & Transport
@@ -265,28 +265,16 @@ These tests must stay green whenever MCP code is changed; use `pwsh ./tools/Run-
 
 - Build + deploy:
   - `cd UnityExplorer && pwsh ./build-ml-coreclr.ps1`
-- Launch game (Test‑VM):
-  - `Start-Process "C:\codex-workspace\space-shooter-build\SpaceShooter_IL2CPP\SpaceShooter.exe"`
-- Logs:
-  - `pwsh ./tools/Get-ML-Log.ps1` (with `-Stream` for live tail).
+- Launch game
 - Inspector CLI:
-  - `pwsh ./tools/Run-McpInspectorCli.ps1 -BaseUrl http://192.168.178.210:51477`
-  - Or: `npx @modelcontextprotocol/inspector --cli http://192.168.178.210:51477/mcp --method tools/list`
+  - `pwsh ./tools/Run-McpInspectorCli.ps1 -BaseUrl http://127.0.0.1:51477`
+  - Or: `npx @modelcontextprotocol/inspector --cli http://127.0.0.1:51477/mcp --method tools/list`
 - Smoke CLI:
-  - `pwsh ./tools/Invoke-McpSmoke.ps1 -BaseUrl http://192.168.178.210:51477 -LogCount 20`
+  - `pwsh ./tools/Invoke-McpSmoke.ps1 -BaseUrl http://127.0.0.1:51477 -LogCount 20`
   - Falls back to `%TEMP%/unity-explorer-mcp.json` or `UE_MCP_DISCOVERY` when `-BaseUrl` is omitted; runs initialize → notifications/initialized → list_tools → GetStatus/TailLogs → read status/scenes/logs and exits non-zero on errors.
-- Test-VM harness:
+- Test MCP:
   - `pwsh C:\codex-workspace\ue-mcp-headless\call-mcp.ps1 -Scenario search|camera|mouse-world|mouse-ui|status|logs|selection|initialize|list_tools|events`
-  - `-Scenario custom` reads `req.json`; when run on the Test-VM, BaseUrl resolves from `-BaseUrl` or discovery (default `http://127.0.0.1:51477`); from the Linux dev machine, target `http://192.168.178.210:51477` instead; `-StreamLines` controls how many `stream_events` chunks are printed.
-
-### 5.3 Mono smoke entry
-
-- `pwsh ./tools/Run-McpMonoSmoke.ps1 -BaseUrl http://127.0.0.1:51477 -LogCount 10 -StreamLines 3` for Mono/net35 hosts (initialize → list_tools → GetStatus/TailLogs/MousePick → read status/scenes/logs → stream_events; fails if `tool_result` is missing).
-
-### 5.4 Mono host validation checklist
-
-- Step‑by‑step human checklist lives in `README-mcp.md` (Mono Host Validation Checklist).
-- Test-VM Mono host is available at `http://192.168.178.210:51478`; validate with `pwsh ./tools/Run-McpMonoSmoke.ps1 -BaseUrl http://192.168.178.210:51478 -EnableWriteSmoke` and `pwsh ./tools/Run-McpInspectorCli.ps1 -BaseUrl http://192.168.178.210:51478`.
+  - `-Scenario custom` reads `req.json`; when run, BaseUrl resolves from `-BaseUrl` or discovery (default `http://127.0.0.1:51477`); from the Linux dev machine, target `http://127.0.0.1:51477` instead; `-StreamLines` controls how many `stream_events` chunks are printed.
 
 ---
 
@@ -295,14 +283,11 @@ These tests must stay green whenever MCP code is changed; use `pwsh ./tools/Run-
 Single source of truth for release gating. Run from repo root unless noted.
 
 - Clean working tree: `git status` should be clean; stash/commit local WIP first.
-- Deploy to Test-VM (Space Shooter):
-  - IL2CPP: `pwsh ./build-ml-coreclr.ps1` (builds and copies to `SpaceShooter_IL2CPP`).
-  - Mono: `dotnet build src/UnityExplorer.csproj -c ML_Mono`; `pwsh ./tools/Update-Mod-Remote.ps1 -Target Mono -StopGame`.
-  - Restart the games on the VM after deploy: `Start-Process "C:\codex-workspace\space-shooter-build\SpaceShooter_IL2CPP\SpaceShooter.exe"` and `Start-Process "C:\codex-workspace\space-shooter-build\SpaceShooter_Mono\SpaceShooter.exe"` (use Win-VM PowerShell).
-- Gates (Linux dev box, against Test-VM hosts):
-  - Inspector CLI: `pwsh ./tools/Run-McpInspectorCli.ps1 -BaseUrl http://192.168.178.210:51477` and `pwsh ./tools/Run-McpInspectorCli.ps1 -BaseUrl http://192.168.178.210:51478`.
-  - Smokes (with guarded writes enabled): `pwsh ./tools/Invoke-McpSmoke.ps1 -BaseUrl http://192.168.178.210:51477 -LogCount 20 -EnableWriteSmoke` and `pwsh ./tools/Run-McpMonoSmoke.ps1 -BaseUrl http://192.168.178.210:51478 -LogCount 10 -StreamLines 10 -EnableWriteSmoke`.
-  - Contract tests (run once per host with matching discovery): `UE_MCP_DISCOVERY=ue-mcp-il2cpp-discovery.json pwsh ./tools/Run-McpContractTests.ps1` and `UE_MCP_DISCOVERY=ue-mcp-mono-discovery.json pwsh ./tools/Run-McpContractTests.ps1`.
+- Restart the games on the VM after deploy
+- Gates (Linux dev box, against Windows host):
+  - Inspector CLI: `pwsh ./tools/Run-McpInspectorCli.ps1 -BaseUrl http://127.0.0.1:51477` and `pwsh ./tools/Run-McpInspectorCli.ps1 -BaseUrl http://127.0.0.1:51478`.
+  - Smokes (with guarded writes enabled): `pwsh ./tools/Invoke-McpSmoke.ps1 -BaseUrl http://127.0.0.1:51477 -LogCount 20 -EnableWriteSmoke`.
+  - Contract tests (run once per host with matching discovery): `UE_MCP_DISCOVERY=ue-mcp-il2cpp-discovery.json pwsh ./tools/Run-McpContractTests.ps1`
 - Optional CI: `.github/workflows/mcp-inspector-cli.yml` supports `workflow_dispatch` to re-run Inspector CLI smoke against provided base URLs.
 - Tagging (documented only): suggested tag `ue-mcp-0.1.0` via `git tag -a ue-mcp-0.1.0 -m "UnityExplorer MCP 0.1.0"` then `git push origin ue-mcp-0.1.0`.
 
@@ -335,7 +320,6 @@ Fine‑grained TODOs live in `plans/unity-explorer-mcp-todo.md`. High‑level th
 
 - Concept draft: `plans/mcp-interface-concept.md`
 - TODOs: `plans/unity-explorer-mcp-todo.md`
-- Space Shooter validation plan: `plans/space-shooter-test-plan.md`
 - Non-MCP runtime feature summary: `docs/unity-explorer-game-interaction.md`
 - Code:
   - `UnityExplorer/src/Mcp/*`
