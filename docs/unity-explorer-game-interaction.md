@@ -1,6 +1,6 @@
 # UnityExplorer Runtime Capabilities (Non-MCP)
 
-This document summarizes the runtime functionality provided by UnityExplorer itself for interacting with a Unity game it is injected into. It focuses on the core in-game UI and scripting features and deliberately excludes the MCP integration and HTTP tooling described in `UnityExplorer/README-mcp.md`.
+This document summarizes the runtime functionality provided by UnityExplorer itself for interacting with a Unity game it is injected into. It focuses on the core in-game UI and scripting features and deliberately excludes the MCP integration and HTTP tooling - these are covered in separate MCP specific documentation.
 
 The implementation in this repo is based on the `yukieiji/UnityExplorer` fork, which is a maintained fork of `sinai-dev/UnityExplorer`. Feature descriptions below reflect that fork where it extends the original behavior (for example, additional C# console script management).
 
@@ -290,11 +290,9 @@ UnityExplorer exposes many runtime settings via an **Options** tab and correspon
 
 ### 11.1 Configuration Files
 
-Depending on how UnityExplorer is injected, the main config file lives in different locations:
+In this fork UnityExplorer is injected through BepInEx 6 IL2CPP, so the relevant config path is:
 
 - **BepInEx**: `BepInEx\config\com.sinai.unityexplorer.cfg`
-- **MelonLoader**: `UserData\MelonPreferences.cfg`
-- **Standalone**: `{DLL_location}\sinai-dev-UnityExplorer\config.cfg`
 
 These configs control global behavior such as startup delays, input handling, overlay options, hotkeys, and various feature toggles.
 
@@ -338,7 +336,7 @@ The Options panel surfaces these settings as editable entries; changes are saved
 UnityExplorer exposes a small API for other mods or scripts to open inspectors without going through the UI manually.
 
 - The main entry point is the `UnityExplorer.InspectorManager` class.
-- From external code (e.g., another BepInEx plugin or Melon mod), you can:
+- From external code, such as another BepInEx plugin, you can:
 
 ```csharp
 // Inspect a specific object instance

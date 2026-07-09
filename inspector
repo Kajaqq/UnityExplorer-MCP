@@ -1,8 +1,0 @@
-#!/bin/bash
-
-inspector="npx @modelcontextprotocol/inspector --cli --transport http http://192.168.178.210:51477"
-args=$@
-exec="$inspector $args"
-
-echo "debug: $exec"
-$exec

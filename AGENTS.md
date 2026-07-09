@@ -1,70 +1,56 @@
-## Agent Instructions (UnityExplorer root)
+# Agent Instructions (UnityExplorer root)
 
-This file is for agents working on this repository, especially when building on Linux but targeting Windows Unity titles.
+## Fork scope
+- Goal: improve compatibility for a specific mobile Unity 6 game running on Windows.
+- Unity version: `6000.0.77f`.
+- Loader/runtime: BepInEx 6 CoreCLR IL2CPP through the custom fork in `../BepInEx/`.
+- Build target: `Release_BIE_Unity_Cpp` from `src/UnityExplorer.sln`.
+- MCP host target: IL2CPP on port `51477`.
+- Mono, net35, MelonLoader, and cross-loader feature parity are out of scope. It is acceptable for those code paths to lag or break while improving this BepInEx 6 IL2CPP target.
 
-### Build focus
+## Documentation rules
+- Keep `plans/unity-explorer-mcp-plan.md` aligned with the current IL2CPP-only architecture and validation flow.
+- Keep `plans/unity-explorer-mcp-todo.md` aligned with active IL2CPP-only tasks.
+- Keep `docs/mcp-interface-specs.md` as the source of truth for MCP DTO shapes, errors, examples, and agent UX expectations.
+- Update `README-mcp.md` when user-facing MCP commands or surfaces change.
 
-- Build only CoreCLR IL2CPP (no Mono).
-- This is a single-game focused fork, based on the original UnityExplorer project. 
-- The game is running Unity 6000.0.77f and uses CoreCLR IL2CPP via a custom fork of BepInEx 6 with source located in `../BepInEx/`.
-- CoreCLR IL2CPP build targets:
-  - `Release_BIE_Unity_Cpp_CoreCLR`
-  - Optionally: `Release_STANDALONE_Cpp_CoreCLR`
-- You do **not** need to build other Mono / net35 / MelonLoader targets unless a task explicitly requires them.
-
-### Parallel workers (scalable workflow)
-
-When running multiple Codex workers in parallel, use these rules to reduce merge conflicts:
-
-- Use `git worktree` under `./.worktrees/<name>` (keep it gitignored).
-- Each worker uses its own branch and commits there.
-- Ensure each worktree has Codex auth available:
-  - If `.codex/auth.json` is missing, symlink it to `$HOME/.codex/auth.json`.
-- Workers should NOT edit these files in parallel runs:
-  - `INSTRUCTIONS.MD`
+## Parallel worker rules
+- Use `git worktree` under `./.worktrees/<name>` so each worker has its own branch and working tree.
+- Ensure Codex auth exists in the worktree (`.codex/auth.json`); if missing, symlink it to `$HOME/.codex/auth.json`.
+- In parallel runs, workers must not edit:
   - `plans/unity-explorer-mcp-plan.md`
   - `plans/unity-explorer-mcp-todo.md`
-  - (Only update `plans/mcp-interface-concept.md` when DTO/tool shapes change.)
+  - `docs/mcp-interface-specs.md` unless DTO/tool shapes change.
 - Avoid shared-file hotspots:
-  - Add new DTOs under `src/Mcp/Dto/` (one feature per file).
-  - Put MCP tool implementations in `src/Mcp/Features/<FeatureName>/Interop/` and `src/Mcp/Features/<FeatureName>/Mono/`.
-  - Keep the aggregator/entry files small and stable: `src/Mcp/UnityReadTools.cs`, `src/Mcp/UnityWriteTools.cs`, `src/Mcp/Mono/MonoReadTools.cs`, `src/Mcp/Mono/MonoWriteTools.cs`, `src/Mcp/Mono/MonoMcpHandlers.cs`.
-  - Keep Mono host logic under `src/Mcp/Mono/` (avoid feature edits in `src/Mcp/McpSimpleHttp.cs`).
-  - Transport stays split under `src/Mcp/Transport/{Interop,Mono}/McpSimpleHttp.*.cs`; keep `McpSimpleHttp` partials in those folders and do not collapse them back into a monolith.
+  - Put DTOs in `src/Mcp/Dto/` (one feature per file).
+  - Put IL2CPP MCP tool implementations in `src/Mcp/Features/<FeatureName>/Interop/`.
+  - Keep `src/Mcp/UnityReadTools.cs` and `src/Mcp/UnityWriteTools.cs` small and stable.
+  - Keep transport under `src/Mcp/Transport/Interop/McpSimpleHttp.*.cs`.
 
-### Required tools on Linux
+## Quality gates
+- Build passes for the IL2CPP target.
+- Static code analysis finds no critical issues.
 
-On a Linux development machine, assume the following tools should be present or installed by the human operator:
+### End-to-end validation
+If a user specifies that a running host is available, run smoke and contract validation:
+- Basic MCP e2e path is demonstrable: start -> handshake -> tool call -> response.
+- Inspector validation is CLI-only. Prefer:
+  - `npx @modelcontextprotocol/inspector --cli http://127.0.0.1:51477/mcp --method tools/list`
+- Run smoke and contract validation when a running host is available:
+  - `pwsh ./tools/Invoke-McpSmoke.ps1 -BaseUrl http://127.0.0.1:51477 -LogCount 20`
+  - `pwsh ./tools/Run-McpContractTests.ps1`
 
-- `.NET SDK` 6.0 or newer (for `dotnet build`).
-- `git` (for source control).
-- For full release packaging and ILRepack usage:
-  - `PowerShell` (pwsh) to run `build.ps1`.
-  - `Mono` to run `lib/ILRepack.exe` as `mono lib/ILRepack.exe ...`.
-- Common CLI tools: `zip`/`unzip` or equivalent (many distros ship these by default).
+## Constraints
+- Use existing implementation boundaries; do not refactor beyond scope.
+- No API invention; reference actual files, paths, and symbols.
+- Prefer PowerShell for user-facing validation commands.
+- Keep write tools guarded: `allowWrites=false` by default, `requireConfirm=true` for mutating operations.
+- To experiment with write tools, use the `SetConfig` tool to toggle `allowWrites` / `requireConfirm` (and `enableConsoleEval` / allowlists) and always reset them to safe values when you are done.
 
-Agents must **not** assume they can install system packages themselves; instead, document the required commands and let the user run them. See the Linux build docs linked below.
-
-### Linux build documentation
-
-There are two Linux-oriented docs under the repo root:
-
-- `docs/linux-build-basic.md` – building raw DLLs only (no packaging).
-- `docs/linux-build-packaging.md` – reproducing the full release packaging with `build.ps1` and ILRepack.
-
-When modifying build steps, update the relevant doc(s) and keep these instructions in sync.
-
-### MCP Quick‑Start (for agents)
-
-- **Build + deploy MCP build:**
-  - From repo root: `cd UnityExplorer`
-  - `'./build.sh'`
-- **Inspector CLI (no UI):**
-  - Prefer the repo helper:
-    - `pwsh ./tools/Run-McpInspectorCli.ps1 -BaseUrl http://<TestVM-IP>:51477`
-  - Or run direct one-liners:
-    - `npx @modelcontextprotocol/inspector --cli http://<TestVM-IP>:51477/mcp --method tools/list`
-    - `npx @modelcontextprotocol/inspector --cli http://<TestVM-IP>:51477/mcp --method tools/call --tool-name GetStatus`
-- **Guarded writes and config:**
-  - By default `allowWrites` is `false`; do not enable this casually on shared machines.
-  - To experiment with write tools, use the `SetConfig` tool to toggle `allowWrites` / `requireConfirm` (and `enableConsoleEval` / allowlists) and always reset them to safe values when you are done.
+## Docs map
+- `plans/unity-explorer-mcp-plan.md`: IL2CPP-focused architecture, status, and validation.
+- `plans/unity-explorer-mcp-todo.md`: active IL2CPP-only checklist.
+- `docs/mcp-interface-specs.md`: MCP interface contract.
+- `docs/linux-build.md`: reproducing the full release packaging with `build.sh` and ILRepack.
+- `README-mcp.md`: user-facing MCP usage and quickstart.
+- `docs/unity-explorer-game-interaction.md`: native UnityExplorer runtime capabilities.

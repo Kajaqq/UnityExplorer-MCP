@@ -53,7 +53,6 @@ try
 
     Invoke-Step -Label "IL2CPP inspector CLI" -Action { & $inspector -BaseUrl $BaseUrlIl2cpp -AuthToken $AuthToken }
     Invoke-Step -Label "IL2CPP smoke" -Action { & $smokeIl2cpp -BaseUrl $BaseUrlIl2cpp -EnableWriteSmoke:$EnableWriteSmoke }
-
     Invoke-Step -Label "Contract tests (IL2CPP discovery)" -Action { Invoke-ContractTests -DiscoveryPath "ue-mcp-il2cpp-discovery.json" -Label "IL2CPP" -ContractScript $contract }
 
     Write-Host "PASS: All gates succeeded." -ForegroundColor Green

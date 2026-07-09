@@ -1,7 +1,8 @@
-Trying provider: gemini
 # Model Context Protocol (MCP) C# SDK
 
-This document provides comprehensive documentation for the Model Context Protocol (MCP) C# SDK. The SDK enables .NET applications to implement and interact with MCP clients and servers, standardizing how applications provide context to Large Language Models (LLMs).
+This document provides comprehensive documentation for the Model Context Protocol (MCP) C# SDK used to build the MCP server in this repository.
+The SDK enables .NET applications to implement and interact with MCP clients and servers, standardizing how applications provide context to Large Language Models (LLMs).
+
 
 ## Overview
 

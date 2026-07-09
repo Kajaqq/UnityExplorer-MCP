@@ -14,7 +14,7 @@ This folder contains the initial contract tests for the in‑process MCP server.
 3. Run:
 
 ```bash
-cd UnityExplorer/tests/dotnet
+cd UnityExplorer-MCP/tests/dotnet
 dotnet test
 ```
 

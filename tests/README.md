@@ -7,6 +7,6 @@ Tests for the MCP surface live under this folder. Current suites:
 Run the .NET suite:
 
 ```bash
-cd UnityExplorer/tests/dotnet
+cd UnityExplorer-MCP/tests/dotnet
 dotnet test
 ```
