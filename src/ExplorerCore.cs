@@ -190,6 +190,9 @@ public static class ExplorerCore
 
     internal static void Update()
     {
+#if INTEROP
+        Mcp.MainThread.Pump();
+#endif
         ExplorerKeybind.Update();
     }
 

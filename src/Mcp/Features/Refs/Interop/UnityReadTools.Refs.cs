@@ -42,7 +42,8 @@ namespace UnityExplorer.Mcp
                 try { valueText = Truncate(instance.ToString() ?? "<null>"); }
                 catch { valueText = typeName; }
 
-                return new { ok = true, refId, type = typeName, kind, count, valueText };
+                McpObjectRefs.TryGetMetadata(refId, out var metadata);
+                return new { ok = true, refId, type = typeName, kind, count, valueText, metadata };
             });
         }
 

@@ -1,19 +1,18 @@
 # Unity Explorer MCP (In‑Process) — Preview
 
-This build hosts a Model Context Protocol (MCP) server inside the Unity Explorer DLL for CoreCLR (IL2CPP Interop) targets. The server exposes read‑only tools and guarded writes over HTTP using the official C# SDK. DTO shapes and error envelopes live in `plans/mcp-interface-concept.md`; this README summarizes how to call the surface.
+This fork hosts a Model Context Protocol (MCP) server inside the Unity Explorer DLL for the BepInEx 6 Unity CoreCLR IL2CPP target. The server exposes read-only tools and guarded writes over HTTP. DTO shapes and error envelopes live in `docs/mcp-interface-specs.md`; this README summarizes how to call the surface.
 
 ## Status
 
-- Targets: CoreCLR builds (`BIE_*_Cpp_CoreCLR`, `ML_Cpp_CoreCLR`, `STANDALONE_Cpp_CoreCLR`).
-- Console scripts: `unity://console/scripts`, `unity://console/script?path=...`, `ReadConsoleScript` (RO), guarded `WriteConsoleScript`/`DeleteConsoleScript`/`RunConsoleScript`, and startup controls (`GetStartupScript`/`WriteStartupScript`/`SetStartupScriptEnabled`/`RunStartupScript`) on both hosts.
-- Hooks advanced: `HookListAllowedTypes`, `HookListMethods`, `HookGetSource`, guarded `HookSetEnabled`/`HookSetSource` (both hosts).
-- Transport: lightweight streamable HTTP over a local TCP listener.
-- Default mode: Read‑only (guarded writes must be explicitly enabled).
-- Release checklist + gates live in `plans/unity-explorer-mcp-plan.md#release-checklist` (source of truth).
+- Target: `Release_BIE_Unity_Cpp` from `src/UnityExplorer.sln` (project config `BIE_Unity_Cpp_CoreCLR`).
+- Console scripts: `unity://console/scripts`, `unity://console/script?path=...`, `ReadConsoleScript` (RO), guarded `WriteConsoleScript`/`DeleteConsoleScript`/`RunConsoleScript`, and startup controls (`GetStartupScript`/`WriteStartupScript`/`SetStartupScriptEnabled`/`RunStartupScript`) on the IL2CPP host.
+- Hooks advanced: `HookListAllowedTypes`, `HookListMethods`, `HookGetSource`, guarded `HookSetEnabled`/`HookSetSource`.
+- Transport: streamable HTTP
+- Default mode: Read‑only (write gated behind `allowWrites` toggle in config)
 
 ## Getting Started
 
-1. Launch a Unity title with Unity Explorer (CoreCLR target).
+1. Launch the target Unity 6 title with Unity Explorer under BepInEx 6 CoreCLR IL2CPP.
 2. The MCP server starts after Explorer initialization.
 3. Discovery file is written to `%TEMP%/unity-explorer-mcp.json` with `{ pid, baseUrl, port, modeHints, startedAt }`.
 4. Connect a client via the MCP C# SDK using `HttpClientTransport` (AutoDetect mode), or talk directly to the HTTP endpoints described below.
@@ -23,7 +22,7 @@ This build hosts a Model Context Protocol (MCP) server inside the Unity Explorer
 Run this non-interactive CLI smoke to validate the MCP surface via `@modelcontextprotocol/inspector --cli` (runs tools/list, resources/list, read status, and call GetStatus). Fails fast if `npx` is missing or the host is down.
 
 ```powershell
-pwsh ./tools/Run-McpInspectorCli.ps1 -BaseUrl http://192.168.178.210:51477/mcp
+pwsh ./tools/Run-McpInspectorCli.ps1 -BaseUrl http://127.0.0.1:51477/mcp
 ```
 
 The helper accepts BaseUrl values with or without `/mcp` and normalizes to the JSON-RPC path. Optional CI: `.github/workflows/mcp-inspector-cli.yml` is a manual (`workflow_dispatch`) workflow that runs this script against provided `baseUrlIl2cpp` inputs (no-op when inputs are empty; host must be reachable from the runner).
@@ -33,7 +32,7 @@ The helper accepts BaseUrl values with or without `/mcp` and normalizes to the J
 Run the full IL2CPP test stack (inspector CLI + smoke + contract tests). Fails fast on any failure.
 
 ```powershell
-pwsh ./tools/Run-McpAllGates.ps1 -BaseUrlIl2cpp http://192.168.178.210:51477 [-EnableWriteSmoke] [-AuthToken <token>]
+pwsh ./tools/Run-McpAllGates.ps1 -BaseUrlIl2cpp http://127.0.0.1:51477 [-EnableWriteSmoke] [-AuthToken <token>]
 ```
 
 ## Inspector CLI (direct one-liners)
@@ -41,13 +40,14 @@ pwsh ./tools/Run-McpAllGates.ps1 -BaseUrlIl2cpp http://192.168.178.210:51477 [-E
 We do not use the Inspector UI for validation; use the CLI.
 
 ```bash
-npx @modelcontextprotocol/inspector --cli http://192.168.178.210:51477/mcp --method tools/list
-npx @modelcontextprotocol/inspector --cli http://192.168.178.210:51477/mcp --method tools/call --tool-name GetStatus
+npx @modelcontextprotocol/inspector --cli http://127.0.0.1:51477/mcp --method tools/list
+npx @modelcontextprotocol/inspector --cli http://127.0.0.1:51477/mcp --method tools/call --tool-name GetStatus
 ```
 
 ## Configuration
 
-The config file is created at `{ExplorerFolder}/mcp.config.json` (Explorer folder is typically `sinai-dev-UnityExplorer/`). Example:
+The config file is created at `{ExplorerFolder}/mcp.config.json` (Explorer folder is typically `sinai-dev-UnityExplorer/`). 
+The Default configuration is:
 
 ```json
 {
@@ -118,6 +118,9 @@ Resources are addressed using `unity://` URIs (paged where noted):
 - `unity://console/scripts` — C# console scripts in the Explorer `Scripts` folder (when present).
 - `unity://hooks` — currently active method hooks.
 
+Campus-specific debugging sequences and expected output shapes are in
+`docs/campus-debugging-guide.md`.
+
 ### Example payloads (abbreviated)
 
 `unity://logs/tail`:
@@ -160,16 +163,28 @@ Read‑only tools (no `allowWrites` required):
 - `GetSelection`
 - `TailLogs`
 - `GetVersion`
+- Campus localization: `GetCampusStatus`, `ListCampusTextObjects`, `ReadCampusTextObject`, `AnalyzeCampusTextObject`, `ListCampusI18nKeys`, `ReadCampusI18nKey`, `ListCampusVisualObjects`, `ReadCampusVisualObject`, `SearchCampusAssets`, `ResolveCampusAsset`, `ListCampusAssetLoadEvents`
 
 Guarded / write-related tools (most require `allowWrites: true`; many also need `confirm=true` and allowlists):
 
 - Config: `SetConfig`, `GetConfig` (sanitized view).
 - Object state: `SetActive`, `SelectObject`, `Reparent`, `DestroyObject`.
-- Reflection/component writes: `SetMember`, `AddComponent`, `RemoveComponent`, `CallMethod` (respect allowlists on both hosts).
+- Reflection/component writes: `SetMember`, `AddComponent`, `RemoveComponent`, `CallMethod` (respect allowlists).
+- Campus localization runtime overrides: `SetCampusTextObject`, `SetCampusTextLayout`, `ResetCampusTextLayout`, `SetCampusI18nValue`, `ExportCampusLocalizationSnapshot`, `ExportCampusTexture`.
 - Hooks: `HookAdd`, `HookRemove` (hook allowlist enforced).
 - Console: `ConsoleEval` (requires `enableConsoleEval` + writes + confirm); console scripts (`WriteConsoleScript`/`DeleteConsoleScript`/`RunConsoleScript`) + startup controls (`GetStartupScript`/`WriteStartupScript`/`SetStartupScriptEnabled`/`RunStartupScript`) require writes; execution also requires `enableConsoleEval` and confirm when configured.
 - Time scale: `GetTimeScale` (read), `SetTimeScale` (guarded; optional lock/unlock).
 - UI test helpers: `SpawnTestUi` / `DestroyTestUi` (for `MousePick` UI validation).
+
+### Campus localization
+
+Campus tools are single-game helpers for live localization work. They target BepInEx 6 Unity IL2CPP CoreCLR and resolve Campus/TMPro types from loaded interop assemblies at runtime; the plugin does not compile against Campus or TextMeshPro assemblies.
+
+Text refs come from `ListCampusTextObjects` and are stable per live text component. Strings are passed through exactly as supplied: no trimming, normalization, markup stripping, ASCII conversion, or newline rewriting. `layoutMode="horizontalInVertical"` rotates a text `RectTransform` for English text in tall Japanese slots and can be reverted with `ResetCampusTextLayout`. `CampusText` and plain TMP text are measured directly; `TextMeshProUGUIRuby` / `MessageText` use the wrapper for the logical text and `TargetTMP` for rendered text metrics.
+
+V1 text support covers `Campus.Common.CampusText`, `TMPro.TMP_Text`, `Qua.UI.TextMeshProUGUIRuby`, `Campus.ADV.MessageText`, and legacy `UnityEngine.UI.Text` instances found through Campus/Qua UI wrappers. Asset/resource manager discovery, master-row scanning, and `AssetNames` cataloging are deferred; existing asset and visual tools remain best-effort loaded-object helpers.
+
+Snapshots and texture exports write under `exportRoot` when configured, otherwise under `ExplorerFolder/CampusLocalization`.
 
 ## Stream Events
 
@@ -179,7 +194,7 @@ All server‑side notifications are delivered over `stream_events` as JSON‑RPC
 { "jsonrpc": "2.0", "method": "notification", "params": { "event": "<name>", "payload": { ... } } }
 ```
 
-Event types (payloads and examples live in `plans/mcp-interface-concept.md`):
+Event types (payloads and examples live in `docs/mcp-interface-specs.md`):
 
 - `log` — log lines (mirrors `unity://logs/tail`).
 - `selection` — selection snapshot (mirrors `unity://selection`).
@@ -197,82 +212,13 @@ Two allowlists are configured in `mcp.config.json` and editable via the Options 
   - `AddComponent` and `RemoveComponent` are restricted to these types (or indices).
 - Reflection allowlist: `reflectionAllowlistMembers`  
   - Array of `"Type.Member"` strings, e.g., `"UnityEngine.Light.intensity"`.  
-  - `SetMember` requires entries here; `CallMethod` (both hosts) uses the same allowlist.
+  - `SetMember` requires entries here; `CallMethod` uses the same allowlist.
 
 Empty allowlists disable the corresponding write features (for safety).
 
-## C# stream_events example
-
-For a minimal C# client that connects to the in‑process MCP server and prints streamed events over HTTP:
-
-```csharp
-using System;
-using System.IO;
-using System.Net.Http;
-using System.Net.Http.Headers;
-using System.Text;
-using System.Text.Json;
-using System.Threading.Tasks;
-
-class Program
-{
-    static async Task Main()
-    {
-        // Load discovery file
-        var path = Environment.GetEnvironmentVariable("UE_MCP_DISCOVERY");
-        if (string.IsNullOrWhiteSpace(path))
-            path = Path.Combine(Path.GetTempPath(), "unity-explorer-mcp.json");
-        if (!File.Exists(path))
-        {
-            Console.Error.WriteLine("Discovery file not found; is Unity Explorer MCP running?");
-            return;
-        }
-
-        using var fs = File.OpenRead(path);
-        using var doc = JsonDocument.Parse(fs);
-        var root = doc.RootElement;
-        var baseUrlStr = root.GetProperty("baseUrl").GetString();
-        var baseUri = new Uri(baseUrlStr!, UriKind.Absolute);
-
-        using var http = new HttpClient { BaseAddress = baseUri };
-
-        var payload = new
-        {
-            jsonrpc = "2.0",
-            id = Guid.NewGuid().ToString(),
-            method = "stream_events",
-            @params = new { }
-        };
-
-        var json = JsonSerializer.Serialize(payload);
-        using var content = new StringContent(json, Encoding.UTF8, "application/json");
-        var rpcPath = "/mcp"; // alias of /message
-        using var req = new HttpRequestMessage(HttpMethod.Post, rpcPath) { Content = content };
-        req.Headers.Accept.Clear();
-        req.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-
-        using var res = await http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead);
-        res.EnsureSuccessStatusCode();
-
-        await using var stream = await res.Content.ReadAsStreamAsync();
-        using var reader = new StreamReader(stream, Encoding.UTF8);
-
-        string? line;
-        while ((line = await reader.ReadLineAsync()) != null)
-        {
-            if (string.IsNullOrWhiteSpace(line))
-                continue;
-            Console.WriteLine(line);
-        }
-    }
-}
-```
-
-This matches the `stream_events` behavior and will print JSON‑RPC `notification`, `result`, and `error` objects as one JSON object per line.
-
 ## Inspector CLI Quick‑Start (`@modelcontextprotocol/inspector --cli`)
 
-1. Start a CoreCLR Unity title with Unity Explorer and ensure MCP is enabled (`mcp.config.json: { "enabled": true }`).
+1. Start a Unity title with Unity Explorer.
 2. From your dev machine, run:
 
    ```bash
@@ -315,5 +261,5 @@ This matches the `stream_events` behavior and will print JSON‑RPC `notificatio
 
 ## Notes
 
-- Error envelopes follow JSON-RPC with `error.data.kind` (see `plans/mcp-interface-concept.md` for the exact shapes). Tool failures return `{ ok:false, error:{ kind, message, hint? } }`.
+- Error envelopes follow JSON-RPC with `error.data.kind` (see `docs/mcp-interface-specs.md` for the exact shapes). Tool failures return `{ ok:false, error:{ kind, message, hint? } }`.
 - All Unity API calls are marshalled to the main thread.

@@ -133,6 +133,21 @@ namespace UnityExplorer.Mcp
             {
                 enumValues = new[] { "single", "additive" };
             }
+            else if (mi.Name.StartsWith("Campus", StringComparison.OrdinalIgnoreCase) ||
+                     mi.Name.Contains("Campus", StringComparison.OrdinalIgnoreCase))
+            {
+                if (string.Equals(p.Name, "source", StringComparison.OrdinalIgnoreCase))
+                    enumValues = new[] { "scenes", "resources", "all" };
+                else if (string.Equals(p.Name, "activeState", StringComparison.OrdinalIgnoreCase))
+                    enumValues = new[] { "active", "inactive", "all" };
+                else if (string.Equals(p.Name, "layoutMode", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(p.Name, "mode", StringComparison.OrdinalIgnoreCase))
+                    enumValues = new[] { "preserve", "horizontalInVertical" };
+                else if (string.Equals(p.Name, "rotation", StringComparison.OrdinalIgnoreCase))
+                    enumValues = new[] { "auto", "+90", "-90" };
+                else if (string.Equals(p.Name, "scope", StringComparison.OrdinalIgnoreCase))
+                    enumValues = new[] { "loadedText", "i18n", "both" };
+            }
 
             object? defaultValue = null;
             if (p.HasDefaultValue)
@@ -465,7 +480,7 @@ namespace UnityExplorer.Mcp
             if (path.Equals("clipboard", StringComparison.OrdinalIgnoreCase))
                 return await UnityReadTools.GetClipboard(default);
             if (path.Equals("logs/tail", StringComparison.OrdinalIgnoreCase))
-                return await UnityReadTools.TailLogs(TryInt(query, "count") ?? 200, default);
+                return await UnityResources.LogsTail(TryInt(query, "count") ?? 200, default);
             if (path.Equals("console/scripts", StringComparison.OrdinalIgnoreCase))
                 return await UnityResources.ConsoleScripts(TryInt(query, "limit"), TryInt(query, "offset"), default);
             if (path.Equals("console/script", StringComparison.OrdinalIgnoreCase))

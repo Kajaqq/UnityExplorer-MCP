@@ -1,10 +1,8 @@
 using System;
+using System.Collections.Concurrent;
 using System.Threading;
 #if INTEROP
 using System.Threading.Tasks;
-#if CPP
-using UniverseLib.Runtime.Il2Cpp;
-#endif
 #endif
 
 #nullable enable
@@ -14,83 +12,76 @@ namespace UnityExplorer.Mcp
 #if INTEROP
     internal static class MainThread
     {
-        private static SynchronizationContext? _context;
+        private const int MaxPumpActionsPerFrame = 64;
+        private static readonly ConcurrentQueue<Action> Queue = new();
+        private static int _mainThreadId;
 
         public static void Capture()
         {
-            _context = SynchronizationContext.Current;
+            _mainThreadId = Thread.CurrentThread.ManagedThreadId;
         }
 
-        public static bool IsCaptured => _context != null;
+        public static bool IsCaptured => _mainThreadId != 0;
+
+        public static void Pump()
+        {
+            _mainThreadId = Thread.CurrentThread.ManagedThreadId;
+
+            for (var i = 0; i < MaxPumpActionsPerFrame && Queue.TryDequeue(out var action); i++)
+                action();
+        }
 
         public static Task Run(Action action)
         {
-            if (_context != null)
+            if (IsMainThread)
             {
-                if (SynchronizationContext.Current == _context)
-                {
-                    action();
-                    return Task.CompletedTask;
-                }
-
-                var tcs = CreateCompletionSource();
-                _context.Post(_ => Execute(action, tcs), null);
-                return tcs.Task;
+                action();
+                return Task.CompletedTask;
             }
 
-            return DispatchToUnity(action);
+            var tcs = CreateCompletionSource();
+            Queue.Enqueue(() => Execute(action, tcs));
+            return tcs.Task;
         }
 
         public static Task<T> Run<T>(Func<T> func)
         {
-            if (_context != null)
+            if (IsMainThread)
             {
-                if (SynchronizationContext.Current == _context)
-                {
-                    return Task.FromResult(func());
-                }
-
-                var tcs = CreateCompletionSource<T>();
-                _context.Post(_ => Execute(func, tcs), null);
-                return tcs.Task;
+                return Task.FromResult(func());
             }
 
-            return DispatchToUnity(func);
+            var tcs = CreateCompletionSource<T>();
+            Queue.Enqueue(() => Execute(func, tcs));
+            return tcs.Task;
         }
 
         public static Task<T> RunAsync<T>(Func<Task<T>> func)
         {
-            if (_context != null)
+            if (IsMainThread)
             {
-                if (SynchronizationContext.Current == _context)
-                {
-                    return func();
-                }
-
-                var tcs = CreateCompletionSource<T>();
-                _context.Post(async _ => { await ExecuteAsync(func, tcs).ConfigureAwait(false); }, null);
-                return tcs.Task;
+                return func();
             }
 
-            return DispatchToUnityAsync(func);
+            var tcs = CreateCompletionSource<T>();
+            Queue.Enqueue(() => _ = ExecuteAsync(func, tcs));
+            return tcs.Task;
         }
 
         public static Task RunAsync(Func<Task> func)
         {
-            if (_context != null)
+            if (IsMainThread)
             {
-                if (SynchronizationContext.Current == _context)
-                {
-                    return func();
-                }
-
-                var tcs = CreateCompletionSource();
-                _context.Post(async _ => { await ExecuteAsync(func, tcs).ConfigureAwait(false); }, null);
-                return tcs.Task;
+                return func();
             }
 
-            return DispatchToUnityAsync(func);
+            var tcs = CreateCompletionSource();
+            Queue.Enqueue(() => _ = ExecuteAsync(func, tcs));
+            return tcs.Task;
         }
+
+        private static bool IsMainThread
+            => _mainThreadId != 0 && Thread.CurrentThread.ManagedThreadId == _mainThreadId;
 
         private static TaskCompletionSource<object?> CreateCompletionSource()
             => new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -149,49 +140,6 @@ namespace UnityExplorer.Mcp
             }
         }
 
-        private static Task DispatchToUnity(Action action)
-        {
-#if CPP
-            var tcs = CreateCompletionSource();
-            Il2CppThreadingHelper.InvokeOnMainThread(new Action(() => Execute(action, tcs)));
-            return tcs.Task;
-#else
-            return Task.Run(action);
-#endif
-        }
-
-        private static Task<T> DispatchToUnity<T>(Func<T> func)
-        {
-#if CPP
-            var tcs = CreateCompletionSource<T>();
-            Il2CppThreadingHelper.InvokeOnMainThread(new Action(() => Execute(func, tcs)));
-            return tcs.Task;
-#else
-            return Task.FromResult(func());
-#endif
-        }
-
-        private static Task DispatchToUnityAsync(Func<Task> func)
-        {
-#if CPP
-            var tcs = CreateCompletionSource();
-            Il2CppThreadingHelper.InvokeOnMainThread(new Action(async () => await ExecuteAsync(func, tcs).ConfigureAwait(false)));
-            return tcs.Task;
-#else
-            return Task.Run(func);
-#endif
-        }
-
-        private static Task<T> DispatchToUnityAsync<T>(Func<Task<T>> func)
-        {
-#if CPP
-            var tcs = CreateCompletionSource<T>();
-            Il2CppThreadingHelper.InvokeOnMainThread(new Action(async () => await ExecuteAsync(func, tcs).ConfigureAwait(false)));
-            return tcs.Task;
-#else
-            return Task.Run(func);
-#endif
-        }
     }
 #elif MONO
     internal static class MainThread
